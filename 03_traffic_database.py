@@ -24,7 +24,7 @@ DB_PASSWORD = 'Vish1408'  # ← CHANGE THIS!
 DB_NAME = 'traffic_violations'
 DB_PORT = 3306
 
-PKL_FILE = '/home/vishwesh/Documents/GUVI_Course_Projects/Traffic_Violations_Project/traffic_violations_cleaned.pkl'  # ← CHANGE THIS!
+CSV_FILE = '/home/vishwesh/Documents/GUVI_Course_Projects/Traffic_Violations_Project/traffic_violations_cleaned.csv'  # ← CHANGE THIS!
 
 BATCH_SIZE = 1000
 PROGRESS_INTERVAL = 50000
@@ -40,8 +40,8 @@ print(f"{'='*80}")
 start_time = time.time()
 
 try:
-    print(f"📂 Loading: {PKL_FILE}")
-    df = pd.read_pickle(PKL_FILE)
+    print(f"📂 Loading: {CSV_FILE}")
+    df = pd.read_csv(CSV_FILE, low_memory=False)
 
     print(f"✅ Loaded successfully!")
     print(f"   Rows: {len(df):,}")
