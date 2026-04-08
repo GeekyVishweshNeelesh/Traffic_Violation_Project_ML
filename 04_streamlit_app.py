@@ -19,12 +19,13 @@ Run: streamlit run 04_streamlit_app_v3.py
 """
 
 import streamlit as st
-import pymysql
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
 import warnings
+import os
+import gdown
 warnings.filterwarnings('ignore')
 
 # Optional folium
@@ -150,47 +151,43 @@ COL_RENAME = {
 
 
 # ============================================================================
-# DATABASE CONNECTION
+# GOOGLE DRIVE CSV LOADER
 # ============================================================================
 
-def get_db():
-    """Create a fresh database connection with DictCursor (for cursor-based queries)."""
-    try:
-        conn = pymysql.connect(
-            host='localhost',
-            user='vishwesh',
-            password='Vish1408',
-            database='traffic_violations',
-            port=3306,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=10
-        )
-        return conn
-    except Exception as e:
-        st.error(f"❌ Database connection failed: {e}")
-        st.info("Check: MariaDB is running, credentials are correct, database exists.")
-        st.stop()
+GDRIVE_FILE_ID = "1KU34HZFWNM3sHamZ18o1nzRTeReq1Okn"
+CSV_PATH = "/home/vishwesh/Documents/GUVI_Course_Projects/Traffic_Violations_Project/traffic_violations_cleaned.csv"
 
+@st.cache_data(show_spinner=False)
+def load_full_csv():
+    """Download CSV from Google Drive if not already present, then load into DataFrame."""
+    if not os.path.exists(CSV_PATH):
+        with st.spinner("📥 Downloading dataset from Google Drive (1.2GB)... This may take 2-3 minutes on first load."):
+            url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
+            gdown.download(url, CSV_PATH, quiet=False)
 
-def get_db_plain():
-    """Create a plain connection WITHOUT DictCursor — required for pd.read_sql().
-    DictCursor causes pd.read_sql() to read column names as data values."""
-    try:
-        conn = pymysql.connect(
-            host='localhost',
-            user='vishwesh',
-            password='Vish1408',
-            database='traffic_violations',
-            port=3306,
-            charset='utf8mb4',
-            connect_timeout=10
-        )
-        return conn
-    except Exception as e:
-        st.error(f"❌ Database connection failed: {e}")
-        st.info("Check: MariaDB is running, credentials are correct, database exists.")
-        st.stop()
+    with st.spinner("📊 Loading dataset into memory..."):
+        df = pd.read_csv(CSV_PATH, low_memory=False)
+
+    # Rename columns to snake_case
+    df = df.rename(columns={k: v for k, v in COL_RENAME.items() if k in df.columns})
+
+    # Convert numeric columns
+    for col in ['latitude', 'longitude', 'accident', 'fatal', 'alcohol',
+                'belts', 'personal_injury', 'property_damage', 'hazmat',
+                'commercial_vehicle', 'work_zone', 'is_weekend', 'high_risk',
+                'hour', 'vehicle_age', 'violation_count', 'charge_count']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Parse date
+    if 'date_of_stop' in df.columns:
+        df['date_of_stop'] = pd.to_datetime(df['date_of_stop'], errors='coerce')
+
+    # Parse month as numeric
+    if 'month' in df.columns:
+        df['month'] = pd.to_numeric(df['month'], errors='coerce')
+
+    return df
 
 
 # ============================================================================
@@ -284,97 +281,72 @@ def get_filter_options():
 
 
 # ============================================================================
-# DATA LOADER
+# DATA LOADER — Pandas filter on full CSV (no DB)
 # ============================================================================
 
 def load_data(date_from, date_to, agencies, subagencies, categories,
               vehicle_types, violation_types, locations,
               race, gender, accident_only, alcohol_only, high_risk_only):
-    """Load filtered data from MariaDB and rename columns to snake_case."""
+    """Filter the full DataFrame loaded from CSV using pandas."""
     try:
-        # Use plain connection (no DictCursor) for pd.read_sql()
-        conn = get_db_plain()
-        clauses = [f"`Date Of Stop` BETWEEN '{date_from}' AND '{date_to}'"]
+        df = load_full_csv().copy()
 
-        def safe(val):
-            return str(val).replace("'", "''")
-
-        def in_clause(col, values):
-            joined = "','".join(safe(v) for v in values)
-            return f"{col} IN ('{joined}')"
-
-        # Strip 'All' from multiselect values before filtering
         def active(values):
             return [v for v in values if v != 'All']
 
-        ag  = active(agencies)
-        sag = active(subagencies)
-        cat = active(categories)
-        vt  = active(vehicle_types)
-        viol= active(violation_types)
-        loc = active(locations)
-
-        if ag:
-            clauses.append(in_clause("Agency", ag))
-        if sag:
-            clauses.append(in_clause("SubAgency", sag))
-        if cat:
-            clauses.append(in_clause("Violation_Category", cat))
-        if vt:
-            clauses.append(in_clause("VehicleType", vt))
-        if viol:
-            clauses.append(in_clause("`Violation Type`", viol))
-        if loc:
-            clauses.append(in_clause("Location", loc))
-        if race and race != 'All':
-            clauses.append(f"Race = '{safe(race)}'")
-        if gender and gender != 'All':
-            clauses.append(f"Gender = '{safe(gender)}'")
-        if accident_only:
-            clauses.append("Accident = 1")
-        if alcohol_only:
-            clauses.append("Alcohol = 1")
-        if high_risk_only:
-            clauses.append("High_Risk = 1")
-
-        where = " AND ".join(clauses)
-
-        # Select only columns used by the dashboard (faster than SELECT *)
-        needed_cols = [
-            "`Date Of Stop`", "original_seq_id", "Agency", "SubAgency", "Location",
-            "Latitude", "Longitude", "Description", "`Violation Type`", "Violation_Category",
-            "Accident", "Fatal", "`Personal Injury`", "`Property Damage`",
-            "Alcohol", "Belts", "`Work Zone`", "HAZMAT", "`Commercial Vehicle`",
-            "High_Risk", "Race", "Gender", "Make", "Model", "Color", "VehicleType",
-            "Vehicle_Age", "Hour", "DayOfWeek", "Month", "Time_Bucket",
-            "Is_Weekend", "Violation_Count", "District_Number", "Arrest_Type_Desc",
-        ]
-        # Only include columns that exist — safe fallback
-        select_cols = ", ".join(needed_cols)
-        query = f"SELECT {select_cols} FROM violations WHERE {where} LIMIT 10000"
-
-        df = pd.read_sql(query, conn)
-        conn.close()
-
-        # Rename to snake_case
-        df = df.rename(columns={k: v for k, v in COL_RENAME.items() if k in df.columns})
-
-        # Convert numeric columns
-        for col in ['latitude', 'longitude', 'accident', 'fatal', 'alcohol',
-                    'belts', 'personal_injury', 'property_damage', 'hazmat',
-                    'commercial_vehicle', 'work_zone', 'is_weekend', 'high_risk',
-                    'hour', 'vehicle_age', 'violation_count', 'charge_count']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-
-        # Parse date
+        # Date filter
         if 'date_of_stop' in df.columns:
-            df['date_of_stop'] = pd.to_datetime(df['date_of_stop'], errors='coerce')
+            df = df[
+                (df['date_of_stop'] >= pd.Timestamp(date_from)) &
+                (df['date_of_stop'] <= pd.Timestamp(date_to))
+            ]
 
-        return df
+        # Agency filter
+        ag = active(agencies)
+        if ag and 'agency' in df.columns:
+            df = df[df['agency'].isin(ag)]
+
+        # SubAgency filter
+        sag = active(subagencies)
+        if sag and 'subagency' in df.columns:
+            df = df[df['subagency'].isin(sag)]
+
+        # Category filter
+        cat = active(categories)
+        if cat and 'violation_category' in df.columns:
+            df = df[df['violation_category'].isin(cat)]
+
+        # Vehicle type filter
+        vt = active(vehicle_types)
+        if vt and 'vehicle_type' in df.columns:
+            df = df[df['vehicle_type'].isin(vt)]
+
+        # Violation type filter
+        viol = active(violation_types)
+        if viol and 'violation_type' in df.columns:
+            df = df[df['violation_type'].isin(viol)]
+
+        # Race filter
+        if race and race != 'All' and 'race' in df.columns:
+            df = df[df['race'] == race]
+
+        # Gender filter
+        if gender and gender != 'All' and 'gender' in df.columns:
+            df = df[df['gender'] == gender]
+
+        # Safety flags
+        if accident_only and 'accident' in df.columns:
+            df = df[df['accident'] == 1]
+        if alcohol_only and 'alcohol' in df.columns:
+            df = df[df['alcohol'] == 1]
+        if high_risk_only and 'high_risk' in df.columns:
+            df = df[df['high_risk'] == 1]
+
+        # Limit to 10K rows for performance
+        return df.head(10000).reset_index(drop=True)
 
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"Error filtering data: {e}")
         return pd.DataFrame()
 
 

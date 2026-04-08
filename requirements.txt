@@ -1,9 +1,9 @@
 streamlit
-pymysql
 pandas
 numpy
 plotly
 matplotlib
 seaborn
+gdown
 folium
 streamlit-folium
