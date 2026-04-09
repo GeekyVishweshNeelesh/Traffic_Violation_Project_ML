@@ -37,9 +37,26 @@ This project builds a **complete data analytics system** that transforms a large
 
 The dashboard is deployed and accessible at:
 
-👉 **[Traffic Violations Insight System](https://your-app-name.streamlit.app)**
+👉 **[Traffic Violations Insight System](https://traffic-violation-project.streamlit.app/)**
 
 > Deployed on [Streamlit Community Cloud](https://streamlit.io/cloud)
+
+
+
+### ⚠️ Deployment Note
+ 
+The full dataset contains **~2 million rows (1.3GB)**. Streamlit Community Cloud's free tier has a **1GB RAM limit**, which cannot load the entire dataset into memory at once.
+ 
+To ensure smooth deployment, the cloud version (`04_streamlit_app_cloud.py`) loads a **sample of 200,000 rows** from the dataset for visualization purposes. This sample is representative of the full dataset and covers all violation types, demographics, vehicle types, and time periods.
+ 
+The **local version** (`04_streamlit_app.py`) connects to a local **MariaDB database** containing the full 2 million rows and displays complete data without any row limit.
+ 
+| Version | File | Data Source | Rows |
+|---------|------|-------------|------|
+| Local | `04_streamlit_app.py` | MariaDB (localhost) | ~2 million |
+| Cloud | `04_streamlit_app_cloud.py` | Google Drive CSV | 200,000 (sample) |
+
+
 
 ---
 
