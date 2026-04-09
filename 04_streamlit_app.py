@@ -1,8 +1,8 @@
 """
 ============================================================================
 TRAFFIC VIOLATIONS INSIGHT SYSTEM
-File 04 — Streamlit Dashboard (v3 - PDF Complete)
-Montgomery County, Maryland | GUVI Capstone Project
+File 04 — Streamlit Dashboard (v3)
+Montgomery County, Maryland
 ============================================================================
 PDF Requirements Covered:
   ✅ Filter by date, location, vehicle type, gender, race, violation category
@@ -1117,7 +1117,7 @@ st.markdown("---")
 st.markdown("""
     <div style='text-align: center; color: #666; padding: 20px;'>
         <p><b>Traffic Violations Insight System</b></p>
-        <p>Montgomery County, Maryland | GUVI Capstone Project</p>
+        <p>Montgomery County, Maryland </p>
         <p>Built with Streamlit 🎈 | Powered by MariaDB 🗄️ | Visualized with Plotly 📊</p>
         <p style='font-size: 0.85em; margin-top: 10px;'>
             ⚡ <b>Optimized:</b> 10K row limit • 9 Database indexes • Smart caching (10 min) • Type conversion
